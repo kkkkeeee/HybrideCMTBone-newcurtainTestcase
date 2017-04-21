@@ -1,0 +1,2 @@
+casename,numtasks,nelg,nelt,LX,npt,particles,walltime,meanstepio,meanstep,stddevstep,CPUt/step/grid
+"('output2', 16, 4096, 136, 5, 512000, 512000, 146.81399999999999, 1.46814, 1.4615918000000006, 2.1762431553943524, 8.9608400000000001e-05)"

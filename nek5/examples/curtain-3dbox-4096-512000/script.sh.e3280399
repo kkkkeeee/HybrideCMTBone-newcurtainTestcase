@@ -1,0 +1,2 @@
+_pmiu_daemon(SIGCHLD): [NID 03647] [c8-5c2s0n3] [Sun Mar 19 15:46:43 2017] PE RANK 15 exit signal Segmentation fault
+[NID 03647] 2017-03-19 15:46:43 Apid 14032024: initiated application termination
