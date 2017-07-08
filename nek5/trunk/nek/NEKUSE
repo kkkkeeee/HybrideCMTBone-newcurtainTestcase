@@ -14,10 +14,10 @@
       character*3     cbu
 
 
-      common /nekuscmt/ varsic(10),rho,phi,pres,cv,e_internal
-     $                 ,t0in,p0in,asnd,rgas,cp,mu,lambda,molarmass
+c     common /nekuscmt/ varsic(10),rho,phi,pres,cv,e_internal
+c    $                 ,t0in,p0in,asnd,rgas,cp,mu,lambda,molarmass
 
-      real              varsic    ,rho,phi,pres,cv,e_internal
-     $                 ,t0in,p0in,asnd,rgas,cp,mu,lambda,molarmass
+c     real              varsic    ,rho,phi,pres,cv,e_internal
+c    $                 ,t0in,p0in,asnd,rgas,cp,mu,lambda,molarmass
 ! let kond=udiff
 

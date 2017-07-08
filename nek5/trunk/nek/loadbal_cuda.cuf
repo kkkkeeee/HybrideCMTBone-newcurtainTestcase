@@ -35,8 +35,8 @@
                      resetFindpts, pload(lelg)
           integer gfirst, inoassignd, resetFindpts, pload
 
-          integer nw
-          common /particlenumber/ nw
+!         integer nw
+!         common /particlenumber/ nw
 
           real   xerange(2,3,lelt)
           common /elementrange/ xerange
@@ -44,12 +44,13 @@
           integer newgllnid(lelg), trans(3, lelg), trans_n, psum(lelg)
           integer e,eg,eg0,eg1,mdw,ndw
           integer ntuple, i, el, delta, nxyz
-          common /ptpointers/ jrc,jpt,je0,jps,jpid1,jpid2,jpid3,jpnn,jai &
-                      ,nai,jr,jd,jx,jy,jz,jx1,jx2,jx3,jv0,jv1,jv2,jv3 &
-                      ,ju0,ju1,ju2,ju3,jf0,jar,jaa,jab,jac,jad,nar,jpid
-          common  /cparti/ ipart(li,lpart)
-          common  /iparti/ n,nr,ni
+!         common /ptpointers/ jrc,jpt,je0,jps,jpid1,jpid2,jpid3,jpnn,jai &
+!                     ,nai,jr,jd,jx,jy,jz,jx1,jx2,jx3,jv0,jv1,jv2,jv3 &
+!                     ,ju0,ju1,ju2,ju3,jf0,jar,jaa,jab,jac,jad,nar,jpid
+!         common  /cparti/ ipart(li,lpart)
+!         common  /iparti/ n,nr,ni
           integer particleMap(3, lelt)
+          real ratio
           !include TSTEP1 to include TIME
           COMMON /TSTEP1/ TIME,TIMEF,FINTIM,TIMEIO &
                     ,DT,DTLAG(10),DTINIT,DTINVM,COURNO,CTARG &
@@ -71,6 +72,7 @@
 !         Step 1: Send number of particles in each element to Processor 0.
           nxyz = nx1*ny1*nz1   !total # of grid point per element
           delta = ceiling(nw*1.0/nelgt)
+          ratio = 1.0   
           ntuple = nelt
           do i=1,ntuple
              eg = lglel(i)
@@ -97,7 +99,7 @@
 !            x_left_boundary = xerange(1,1,i)
 !            if (x_left_boundary .lt. gas_right_boundary) then
 !            !if (vx(1,1,1,i) .ne. 0) then
-                particleMap(3, i) = particleMap(3, i) + delta
+                particleMap(3, i) = particleMap(3, i) + delta*ratio
 !            else
 !               particleMap(3, i) = 0
 !               print *, 'element: ', particleMap(1,i), ' gas 0'
@@ -140,7 +142,7 @@
 
           call izero(trans, 3*lelg)
           call track_elements(gllnid, newgllnid, nelgt, trans, &
-                                    trans_n, lglel, lelt)
+                                    trans_n, lglel)
 !         print *, 'print trans'
 !         do 110 i=1, trans_n
 !           print *, trans(1, i), trans(2, i), trans(3, i)
@@ -148,15 +150,170 @@
 
           print *, "finished track elements in processor", nid
           call track_particles(trans, trans_n)
-          call mergePhigArray_gpu(newgllnid, trans, trans_n)
-          call mergeUArray_gpu(newgllnid)
+!         call mergePhigArray_gpu(newgllnid, trans, trans_n)
+!         call mergeUArray_gpu(newgllnid)
+          istate = cudaMemcpy(phig,d_phig,lelt*lx1*ly1*lz1,&
+              cudaMemcpyDevicetoHost)
+          call mergeArray(phig, lx1*ly1*lz1, lelt, newgllnid, 1)
+          istate = cudaMemcpy(d_phig,phig,lelt*lx1*ly1*lz1,&
+               cudaMemcpyHosttoDevice)
+
+          istate = cudaMemcpy(u,d_u,lelt*toteq*lx1*ly1*lz1,&
+               cudaMemcpyDevicetoHost)
+          call mergeArray(u, lx1*ly1*lz1*toteq, lelt, newgllnid, 2)
+          istate = cudaMemcpy(d_u,u,lelt*toteq*lx1*ly1*lz1,&
+               cudaMemcpyHosttoDevice)
+!         call mergeTlagArray_gpu(newgllnid)
 
           call icopy(gllnid, newgllnid, lelg)
 
           return
           end
 
-!-------------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------------
+!---------------------------------------------------------------------------------------
+          subroutine mergeArray_gpu(arrayName, len1, len2,&
+            newgllnid, atype)
+          use cudafor
+          use glbvariable
+!         include 'SIZE.cuf'
+          include 'INPUT.cuf'
+          include 'PARALLEL.cuf'
+!         include 'TSTEP.cuf'
+          include 'CMTDATA.cuf'
+
+!         common /gpuvariables/ d_phig(lx1,ly1,lz1,lelt)
+!         real, device :: d_phig
+
+          integer newgllnid(lelg), trans(3, lelg), len1, len2 
+          real arrayName(len1, len2)
+          real tempArray(len1, len2)
+          logical partl
+          integer nl, sid, eid
+          integer key, nkey, trans_n, nxyz
+          integer atype
+          integer procarray(3,lelg), phigarray(len1, len2)
+          integer tempphig(len1, len2)
+
+!         Step 1: Build phigarray for the elements to be transferred to neighboring processes.
+          starttime = dnekclock()
+          trans_n=0
+          nxyz = len1
+          nl=0
+!         istate = cudaMemcpy(phig,d_phig,nelt*lx1*ly1*lz1, cudaMemcpyDevicetoHost)
+          do i=1, nelt
+              ieg = lglel(i)
+              if ((gllnid(ieg) .eq. nid) .and. &
+                          (gllnid(ieg) .ne. newgllnid(ieg))) then
+                  procarray(1, index_n) = gllnid(ieg)
+                  procarray(2, index_n) = newgllnid(ieg)
+                  procarray(3, index_n) = ieg
+                  do k=1, lz1
+                      do n=1, ly1
+                         do m=1, lx1
+                            ind=m+(n-1)*ly1+(k-1)*lz1*ly1
+                            phigarray(ind, index_n) = phig(m,n,k,i)
+                         enddo
+                      enddo
+                  enddo
+              index_n=index_n+1
+              endif
+          enddo
+          index_n=index_n-1
+
+!          print *, index_n, lelg, nid
+
+!         Step 2: Send/receive phigarray to/from neighbors
+          key=2
+          call crystal_tuple_transfer(cr_h, trans_n, nelgt, trans,&
+                         3, partl, nl, phigarray,nxyz,key)
+!         print *, 'nid: ', nid, 'received trans_n', trans_n      
+!         Step 2: Sort the received phigarray based on global element number
+          key=3
+          nkey=1
+          call crystal_tuple_sort(cr_h, trans_n, trans, 3, &
+                    partl, nl, phigarray, nxyz, key,nkey)
+
+!         Step 4: set start id and end id of phig of existing (not transferred) elements
+          !start id is the index of the first element that has not been sent to the left neighbor
+          !end id is the index of the last element that has not been sent to the right neighbor
+          sid=1
+          ifirstelement = lglel(sid)
+          phig_n=0
+          do i=1, index_n
+              !if (procarray(3,i) .lt. ifirstelement) then
+      !            set tempphig from phigarray
+                   !phig_n=phig_n+1
+                   !do j=1, nxyz
+                    !  tempphig(j,phig_n)=phigarray(j,i)
+                   !enddo
+              if (procarray(3,i) .eq. ifirstelement) then
+                       sid=sid+ 1
+                       ifirstelement=lglel(sid)
+              endif
+          enddo
+          eid = nelt
+          ilastelement = lglel(eid)
+          do i=index_n, 1, -1
+               if (procarray(3,i) .eq. ilastelement) then
+                   eid = eid -1
+                   ilastelement = lglel(eid)
+               endif
+          enddo
+
+!         Step 5: Update local phig based on elements 
+!                 a) received from left neighbor
+!                 b) existing elements
+!                 c) received from right neighbor
+          ifirstelement = lglel(sid)
+          do i=1, trans_n
+              if (trans(3, i) .lt. ifirstelement) then
+                  ! set tempphig from phigarray
+                   phig_n=phig_n+1
+                   do j=1, nxyz
+                      tempphig(j,phig_n)=phigarray(j,i)
+                   enddo
+              endif
+          enddo
+
+          if (sid .le. eid) then  !set tempphig from original phig
+              do i=sid, eid
+                  phig_n=phig_n+1
+                  do k=1, lz1
+                      do n=1, ly1
+                         do m=1, lx1
+                            ind=m+(n-1)*ly1+(k-1)*lz1*ly1
+                            tempphig(ind, phig_n) = phig(m,n,k,i)
+                         enddo
+                      enddo
+                  enddo
+              enddo
+          endif
+          ilastelement = lglel(eid)
+          do i=1, trans_n
+              if (trans(3, i) .gt. ilastelement) then
+                  ! set tempphig from phigarray
+                   phig_n=phig_n+1
+                   do j=1, nxyz
+                      tempphig(j,phig_n)=phigarray(j,i)
+                   enddo
+              endif
+          enddo
+          !copy tempphig to phig
+          do i=1, phig_n
+             do k=1, lz1
+                do n=1, ly1
+                    do m=1, lx1
+                        ind=m+(n-1)*ly1+(k-1)*lz1*ly1
+                        phig(m,n,k,i) = tempphig(ind, i)
+                    enddo
+                enddo
+             enddo
+          enddo
+!         istate = cudaMemcpy(d_phig,phig,phig_n*lx1*ly1*lz1, cudaMemcpyHosttoDevice)
+       print *, "Update phig array: phig_n", phig_n
+       end
+!------------------------------------------------------------------
           subroutine mergePhigArray_gpu(newgllnid, trans, trans_n)
           use cudafor
           use glbvariable
@@ -439,12 +596,12 @@
       include 'PARALLEL.cuf'
 
 !     parameter (lr=16*ldim,li=5+6)
-      common  /iparti/ n,nr,ni
-      common  /cpartr/ rpart(lr,lpart) ! Minimal value of lr = 14*ndim+1
-      common  /cparti/ ipart(li,lpart) ! Minimal value of lr = 14*ndim+1
-      common /ptpointers/ jrc,jpt,je0,jps,jpid1,jpid2,jpid3,jpnn,jai &
-                     ,nai,jr,jd,jx,jy,jz,jx1,jx2,jx3,jv0,jv1,jv2,jv3 &
-                     ,ju0,ju1,ju2,ju3,jf0,jar,jaa,jab,jac,jad,nar,jpid
+!     common  /iparti/ n,nr,ni
+!     common  /cpartr/ rpart(lr,lpart) ! Minimal value of lr = 14*ndim+1
+!     common  /cparti/ ipart(li,lpart) ! Minimal value of lr = 14*ndim+1
+!     common /ptpointers/ jrc,jpt,je0,jps,jpid1,jpid2,jpid3,jpnn,jai &
+!                    ,nai,jr,jd,jx,jy,jz,jx1,jx2,jx3,jv0,jv1,jv2,jv3 &
+!                    ,ju0,ju1,ju2,ju3,jf0,jar,jaa,jab,jac,jad,nar,jpid
       common /myparth/ i_fp_hndl, i_cr_hndl
       integer ip, e
       logical partl         ! This is a dummy placeholder, used in cr()

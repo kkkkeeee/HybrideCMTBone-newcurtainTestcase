@@ -102,19 +102,20 @@ c      COMMON /SCRCG/ DUMM10(LX1,LY1,LZ1,LELT,1)
 
       call dg_setup    !     Setup DG, if dg flag is set.
 
-      if (ifflow.and.(fintim.ne.0.or.nsteps.ne.0)) then    ! Pressure solver 
-         call estrat                                       ! initialization.
-         if (iftran.and.solver_type.eq.'itr') then         ! Uses SOLN space 
-            call set_overlap                               ! as scratch!
-         elseif (solver_type.eq.'fdm'.or.solver_type.eq.'pdm')then
-            ifemati = .true.
-            kwave2  = 0.0
-            if (ifsplit) ifemati = .false.
-            call gfdm_init(nx2,ny2,nz2,ifemati,kwave2)
-         elseif (solver_type.eq.'25D') then
-            call g25d_init
-         endif
-      endif
+c     commented by keke, set_overlap takes too much time
+c     if (ifflow.and.(fintim.ne.0.or.nsteps.ne.0)) then    ! Pressure solver 
+c        call estrat                                       ! initialization.
+c        if (iftran.and.solver_type.eq.'itr') then         ! Uses SOLN space 
+c           call set_overlap                               ! as scratch!
+c        elseif (solver_type.eq.'fdm'.or.solver_type.eq.'pdm')then
+c           ifemati = .true.
+c           kwave2  = 0.0
+c           if (ifsplit) ifemati = .false.
+c           call gfdm_init(nx2,ny2,nz2,ifemati,kwave2)
+c        elseif (solver_type.eq.'25D') then
+c           call g25d_init
+c        endif
+c     endif
 
       call init_plugin !     Initialize optional plugin
 

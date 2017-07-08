@@ -21,12 +21,14 @@ c     Solve the Euler equations
 
       if(istep.eq.1) call set_tstep_coef !- level2.txt
       if(istep.eq.1) call cmt_flow_ics(ifrestart) !- level2.txt
+      if(istep.eq.1) call usr_particles_init
 
       nstage = 3
       do stage=1,nstage
          if (stage.eq.1) call nekcopy(res3(1,1,1,1,1),U(1,1,1,1,1),n) !(level2.txt)
 
          call compute_rhs_and_dt !- level2.txt
+         call usr_particles_solver
          tbeg = dnekclock()
          do e=1,nelt
             do eq=1,toteq
@@ -104,9 +106,10 @@ c-----------------------------------------------------------------------
 
       do kstep=1,nsteps,msteps
          call nek__multi_advance(kstep,msteps)
-         call process_cpu_particles
+         !call process_cpu_particles
          call prepost (.false.,'his')
          call in_situ_check()
+         resetFindpts = 0 
          if (lastep .eq. 1) goto 1001
 
 c        modstep = mod(kstep, 500)
@@ -304,8 +307,8 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 !----------------------------------------------------------------------
 
-      subroutine userchk
-      include 'SIZE.cuf'
+      subroutine userchk_cmtbone
+      include 'SIZE'
 
       parameter (lr=16*ldim,li=5+6)
       common  /cpartr/ rpart(lr,lpart) ! Minimal value of lr = 16*ndim
@@ -330,7 +333,7 @@ c-----------------------------------------------------------------------
       end
 
 c---------------------------------------------------------------------------
-      subroutine init_interpolation
+      subroutine init_interpolation_cmtbone
       include 'SIZE'
       include 'INPUT'
 c
@@ -381,7 +384,7 @@ c     calc z bary weights
 
 c---------------------------------------------------------------------------
 
-      subroutine place_particles
+      subroutine place_particles_cmtbone
       include 'SIZE'
       include 'TOTAL'
       include 'CMTDATA'
@@ -511,7 +514,7 @@ c-----------------------------------------------------------------------
 c----------------------------------------------------------------------
 c     effeciently move particles between processors routines
 c----------------------------------------------------------------------
-      subroutine move_particles_inproc
+      subroutine move_particles_inproc_cmtbone
 c     Interpolate fluid velocity at current xyz points and move
 c     data to the processor that owns the points.
 c     Input:    n = number of points on this processor
@@ -573,7 +576,7 @@ c        print *, 'before transfer nid: ', nid, '# particles: ', n
 c        end added by keke
 c     endif
 
-      call interp_comm_part()
+      call interp_comm_part() !in box.usr.orignal, moved to here
 
       call particles_in_nid(fptsmap,rfpts,lrf,ifpts,lif,nfpts)
 
@@ -625,13 +628,15 @@ c     Interpolate (locally, if data is resident).
 c        added by keke
 c     if(mod(nid, 5) .eq. 0) then
          print *, 'nid:', nid, '#particles:', n, 'nelt'
-     $        ,nelt, n+nelt*ceiling(nw*1.0)/nelgt
+     $        ,nelt, 'nw', nw, 'nelgt', nelgt
+     $        ,n+nelt*ceiling(nw*1.0)/nelgt
 c     endif
 c        end added by keke
       return
       end
 c-----------------------------------------------------------------------
-      subroutine particles_in_nid(fptsmap,rfpts,nrf,ifpts,nif,nfpts)
+      subroutine particles_in_nid_cmtbone
+     $  (fptsmap,rfpts,nrf,ifpts,nif,nfpts)
       include 'SIZE'
       parameter (lr=16*ldim,li=5+6)
       common  /cpartr/ rpart(lr,lpart) ! Minimal value of lr = 16*ndim
@@ -695,7 +700,7 @@ c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
 
 c-----------------------------------------------------------------------
-      subroutine particles_solver_nearest_neighbor
+      subroutine particles_solver_nearest_neighbor_cmtbone
       include 'SIZE'
       include 'TOTAL'
       include 'CMTDATA'
@@ -936,7 +941,7 @@ c        particles in different elements
       end
 c-----------------------------------------------------------------------
 
-      subroutine bounds_p_check(xx,xl,xr,ifmove)
+      subroutine bounds_p_check_cmtbone(xx,xl,xr,ifmove)
 
       ifmove = 0
       if (xx .gt. xr) then
@@ -953,7 +958,7 @@ c-----------------------------------------------------------------------
 
 c-----------------------------------------------------------------------
 c-----------------------------------------------------------------------
-      subroutine interp_props_part_location
+      subroutine interp_props_part_location_cmtbone
       include 'SIZE'
       include 'INPUT'
       include 'SOLN'
@@ -990,4 +995,136 @@ c     print *, 'in interp_props_part_location, nid: ', nid, 'n:', n
       return
       end
 c----------------------------------------------------------------------
+
+      subroutine interp_comm_part()
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CTIMER'
+
+      common  /iparti/ n,nr,ni
+
+      common /nekmpi/ mid,mp,nekcomm,nekgroup,nekreal
+      common /myparth/ i_fp_hndl, i_cr_hndl
+
+      common /elementload/ gfirst, inoassignd, resetFindpts, pload(lelg)
+      integer gfirst, inoassignd, resetFindpts, pload
+
+      integer icalld1
+      save    icalld1
+      data    icalld1 /0/
+
+      logical partl         ! This is a dummy placeholder, used in cr()
+      nl = 0                ! No logicals exchanged
+      if ((icalld1.eq.0) .or. (resetFindpts .eq. 1))then
+         tolin = 1.e-12
+         if (wdsize.eq.4) tolin = 1.e-6
+         call intpts_setup  (tolin,i_fp_hndl)
+         call crystal_setup (i_cr_hndl,nekcomm,np)
+         icalld1 = icalld1 + 1
+c        resetFindpts = 0
+c        added by keke
+         print *, 'before transfer nid: ', nid, '# particles: ', n
+c        end added by keke
+      endif
+
+      end
+
+c-----------------------------------------------------------------------
+      subroutine interp_u_for_adv(rpart,nr,ipart,ni,n,ux,uy,uz)
+c     Interpolate fluid velocity at current xyz points and move
+c     data to the processor that owns the points.
+c     Input:    n = number of points on this processor
+c     Output:   n = number of points on this processor after the move
+c     Code checks for n > lpart and will not move data if there
+c     is insufficient room.
+      include 'SIZE'
+      include 'TOTAL'
+      include 'CTIMER'
+
+      common /nekmpi/ mid,mp,nekcomm,nekgroup,nekreal
+      common /myparth/ i_fp_hndl, i_cr_hndl
+
+      real    pt_timers(10), scrt_timers(10)
+      common /trackingtime/ pt_timers, scrt_timers
+
+      real    rpart(nr,n),ux(1),uy(1),uz(1)
+      integer ipart(ni,n)
+
+      parameter (lrf=4+ldim,lif=5+1)
+      real               rfpts(lrf,lpart)
+      common /fptspartr/ rfpts
+      integer            ifpts(lif,lpart),fptsmap(lpart)
+      common /fptsparti/ ifpts,fptsmap
+
+      common /ptpointers/ jrc,jpt,je0,jps,jpid1,jpid2,jpid3,jpnn,jai
+     >               ,nai,jr,jd,jx,jy,jz,jx1,jx2,jx3,jv0,jv1,jv2,jv3
+     >               ,ju0,ju1,ju2,ju3,jf0,jar,jaa,jab,jac,jad,nar,jpid
+
+      integer icalld1
+      save    icalld1
+      data    icalld1 /0/
+
+      logical partl         ! This is a dummy placeholder, used in cr()
+      nl = 0                ! No logicals exchanged
+
+      scrt_timers(4) = dnekclock()
+      call interp_comm_part()
+
+      scrt_timers(9) = dnekclock()
+
+!     find particles in this rank, put into map
+      call particles_in_nid(fptsmap,rfpts,lrf,ifpts,lif,nfpts,rpart,nr
+     $                     ,ipart,ni,n)
+
+c     lif is a 'block' size to know how many indexes to skip on next
+c     jrc, jpt, and je0 store the find results
+      scrt_timers(5) = dnekclock()
+      call findpts(i_fp_hndl !  stride     !   call findpts( ihndl,
+     $           , ifpts(jrc,1),lif        !   $             rcode,1,
+     $           , ifpts(jpt,1),lif        !   &             proc,1,
+     $           , ifpts(je0,1),lif        !   &             elid,1,
+     $           , rfpts(jr ,1),lrf        !   &             rst,ndim,
+     $           , rfpts(jd ,1),lrf        !   &             dist,1,
+     $           , rfpts(jx ,1),lrf        !   &             pts(    1),1,
+     $           , rfpts(jy ,1),lrf        !   &             pts(  n+1),1,
+     $           , rfpts(jz ,1),lrf ,nfpts)    !   &             pts(2*n+1),1,n)      scrt_timers(5) = dnekclock() - scrt_timers(5)
+      pt_timers(5) = scrt_timers(5) + pt_timers(5)
+
+      nmax = iglmax(n,1)
+      if (nmax.gt.lpart) then
+         if (nid.eq.0) write(6,1) nmax,lpart
+    1    format('WARNING: Max number of particles:'
+     $   i9,'.  Not moving because lpart =',i9,'.')
+      else
+         scrt_timers(6) = dnekclock()
+!        copy rfpts and ifpts back into their repsected positions in rpart and ipart
+         call update_findpts_info(rpart,nr,ipart,ni,n,rfpts,lrf
+     $                       ,ifpts,lif,fptsmap,nfpts)
+         scrt_timers(9) = dnekclock() - scrt_timers(9) - scrt_timers(5)
+         pt_timers(9) = scrt_timers(9) + pt_timers(9)
+!        Move particle info to the processor that owns each particle
+!        using crystal router in log P time:
+
+         jps = jai-1     ! Pointer to temporary proc id for swapping
+         do i=1,n        ! Can't use jpt because it messes up particle info
+            ipart(jps,i) = ipart(jpt,i)
+         enddo
+
+!        sends and receives particle information (updating n)
+         call crystal_tuple_transfer(i_cr_hndl,n,lpart
+     $              , ipart,ni,partl,nl,rpart,nr,jps)
+!        Sort by element number - for improved local-eval performance
+         call crystal_tuple_sort    (i_cr_hndl,n
+     $              , ipart,ni,partl,nl,rpart,nr,je0,1)
+         pt_timers(6) = pt_timers(6) + dnekclock() - scrt_timers(6)
+      endif
+
+!     Interpolate (locally, if data is resident).
+      scrt_timers(7) = dnekclock()
+!      call baryweights_findpts_eval(rpart,nr,ipart,ni,n)
+      pt_timers(7) = pt_timers(7) + dnekclock() - scrt_timers(7)
+      pt_timers(4) = pt_timers(4) + dnekclock() - scrt_timers(4)
+      return
+      end
 

@@ -390,7 +390,7 @@ c    if (icall.eq.0) call build_new_filter(intv,zgm1,nx1,ncut,wght,nio)
       return
       end
 c-----------------------------------------------------------------------
-      subroutine intpts_setup(tolin,ih)
+      subroutine intpts_setup_cmtbone(tolin,ih)
 c
 c setup routine for interpolation tool
 c tolin ... stop point seach interation if 1-norm of the step in (r,s,t) 

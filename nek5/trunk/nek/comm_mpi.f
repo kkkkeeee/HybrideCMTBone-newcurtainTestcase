@@ -570,6 +570,24 @@ c
 
       return
       end
+
+c-----------------------------------------------------------------------
+      function igl_running_sum_ex(in) !exclusive prefix sum, added by keke
+c
+      include 'mpif.h'
+      common /nekmpi/ nid,np,nekcomm,nekgroup,nekreal
+      integer status(mpi_status_size)
+      integer x,w,r
+
+      x = in  ! running sum
+      w = in  ! working buff
+      r = 0   ! recv buff
+
+      call mpi_exscan(x,r,1,mpi_integer,mpi_sum,nekcomm,ierr)
+      igl_running_sum_ex = r
+
+      return
+      end
 c-----------------------------------------------------------------------
       subroutine platform_timer(ivb) ! mxm, ping-pong, and all_reduce timer
 

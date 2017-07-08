@@ -1691,10 +1691,11 @@ c-----------------------------------------------------------------------
       include 'TURBO'
       include 'PARALLEL'
       include 'NEKUSE'
+      include 'CMTDATA'
 
-      common /solnconsvar/ u(lx1,ly1,lz1,toteq,lelcmt) ! cmt only
-      common /otherpvar/   phig(lx1,ly1,lz1,lelcmt)    ! cmt only
-      common /cmtgasprop/  csound(lx1,ly1,lz1,lelcmt)  ! cmt only
+c     common /solnconsvar/ u(lx1,ly1,lz1,toteq,lelcmt) ! cmt only
+c     common /otherpvar/   phig(lx1,ly1,lz1,lelcmt)    ! cmt only
+c     common /cmtgasprop/  csound(lx1,ly1,lz1,lelcmt)  ! cmt only
       integer eqnum,e,eg
 
       nel   = nelfld(ifield)

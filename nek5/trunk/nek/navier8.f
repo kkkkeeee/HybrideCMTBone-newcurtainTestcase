@@ -1835,12 +1835,18 @@ c-----------------------------------------------------------------------
       parameter(mdw=2+2**ldim)
       parameter(ndw=7*lx1*ly1*lz1*lelv/mdw)
       common /scrns/ wk(mdw,ndw)   ! room for long ints, if desired
-      integer wk,e,eg,eg0,eg1
+      integer wk,e,eg,eg0,eg1, distrib
+      common /inputfiles/ mapdata(mdw,ndw)
+      integer mapdata
+      integer neli
+      save neli
 
       character*132 mapfle
       character*1   mapfle1(132)
       equivalence  (mapfle,mapfle1)
 
+      starttime = dnekclock()
+      if (gfirst .eq. 1) then
       iok = 0
       if (nid.eq.0) then
          lfname = ltrunc(reafle,132) - 4
@@ -1889,22 +1895,49 @@ c-----------------------------------------------------------------------
             eg0 = eg1
          enddo
          close(80)
+         call icopy(mapdata, wk, mdw*ndw)
          ntuple = m
+         endtime = dnekclock()
+         print *, "read map file", endtime - starttime
       elseif (nid.lt.npass) then
          call msgwait(msg_id)
+         call icopy(mapdata, wk, mdw*ndw) 
          ntuple = ndw
       else
          ntuple = 0
       endif
+      else
+          npass = 1 + (neli/ndw)
+          !print *, "Debug nelgt", nid,  nelgt, mdw, ndw, neli, npass
+          if (nid .eq. 0) then
+              call icopy(wk, mapdata, mdw*ndw)
+              ntuple = neli-(npass-1)*ndw
+          else if (nid .lt. npass) then
+              ntuple = ndw
+              call icopy(wk, mapdata, mdw*ndw)
+          else
+              ntuple = 0
+          endif
+      endif
 
 c     Distribute and assign partitions
       if (.not.ifgfdm) then             ! gllnid is already assigned for gfdm
-        lng = isize*neli
         if ( gfirst .eq. 1) then
+c           if (nid .eq. 0) then
+c              call assign_partitions   !(gllnid, lelt, nelgt, np)
+!keke add, assign gllnid according to the elements load balance
+c           endif
+            lng = isize*neli
             call bcast(gllnid,lng)
             call assign_gllnid(gllnid,gllel,nelgt,nelgv,np) ! gllel is used as scratch
         else
-            call recompute_partitions   !keke add, assign gllnid according to the elements load balance, gllnid has obtained within this function
+            distrib = param(80)
+            if (distrib.eq.1) then
+                call recompute_partitions_distr   !keke add, distributed load balance
+            else
+                call recompute_partitions   !keke add, assign gllnid according to the elements load balance, gllnid has obtained within this function
+            endif
+            lng = isize*neli
             call bcast(pload,lng)
         endif
 
