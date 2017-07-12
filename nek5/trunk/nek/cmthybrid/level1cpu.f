@@ -21,14 +21,14 @@ c     Solve the Euler equations
 
       if(istep.eq.1) call set_tstep_coef !- level2.txt
       if(istep.eq.1) call cmt_flow_ics(ifrestart) !- level2.txt
-      if(istep.eq.1) call usr_particles_init
+c     if(istep.eq.1) call usr_particles_init
 
       nstage = 3
       do stage=1,nstage
          if (stage.eq.1) call nekcopy(res3(1,1,1,1,1),U(1,1,1,1,1),n) !(level2.txt)
 
          call compute_rhs_and_dt !- level2.txt
-         call usr_particles_solver
+c        call usr_particles_solver
          tbeg = dnekclock()
          do e=1,nelt
             do eq=1,toteq
@@ -112,58 +112,58 @@ c-----------------------------------------------------------------------
          resetFindpts = 0 
          if (lastep .eq. 1) goto 1001
 
-c        modstep = mod(kstep, 500)
-c        if (modstep .eq. 0) then
-c          resetFindpts = 1
-c          call reinitialize
-c          call printVerify
-c        endif
-
-c        auto load balancing
-         if(nid .eq. 0) then
-         if(kstep .le. reinit_step+10) then !for the first 10 step after
-                                            !rebalance, pick the minimum
-                                            !one as the init_time
-            if((INIT_TIME .gt. TTIME_STP) .and. (TTIME_STP .ne. 0)) then
-                INIT_TIME = TTIME_STP
-            endif
-         else if(kstep .gt. reinit_step+100) then
-            diff_time = (TTIME_STP-INIT_TIME)/INIT_TIME
-               if(nid .eq. 0) then
-               print *, "nid:", nid, "ttime_stp:", TTIME_STP, INIT_TIME
-     $           ,diff_time
-               endif
-         endif
+         modstep = mod(kstep, 5)
+         if (modstep .eq. 0) then
+           resetFindpts = 1
+           call reinitialize
+           call printVerify
          endif
 
-         call bcast(diff_time, 8)
-         if (diff_time .gt. 0.1) then
-c           print *, "diff_time:", diff_time, "counter:", counter, nid
-c    >         , last_kstep
-            if (last_kstep .eq. 0) then
-                counter = counter + 1
-            else if((counter .le. 2) .and.
-     $                     (last_kstep .eq. kstep-1))then
-                counter = counter + 1
-            else
-                counter = 0
-            endif
-            last_kstep = kstep
-            if (counter .gt. 2) then
-                !print *, "into the reinit, nid:", nid, "diff_time:",
-     $            !diff_time
-                resetFindpts = 1
-                call reinitialize
-                call printVerify
-                reinit_step = kstep
-                if(nid .eq. 0) then
-                   print *, "reinitilize, reiniti_step:", reinit_step
-                endif
-                diff_time = 0.0
-                INIT_TIME = 100
-                counter = 0
-            endif
-         endif
+cc        auto load balancing
+c         if(nid .eq. 0) then
+c         if(kstep .le. reinit_step+10) then !for the first 10 step after
+c                                            !rebalance, pick the minimum
+c                                            !one as the init_time
+c            if((INIT_TIME .gt. TTIME_STP) .and. (TTIME_STP .ne. 0)) then
+c                INIT_TIME = TTIME_STP
+c            endif
+c         else if(kstep .gt. reinit_step+100) then
+c            diff_time = (TTIME_STP-INIT_TIME)/INIT_TIME
+c               if(nid .eq. 0) then
+c               print *, "nid:", nid, "ttime_stp:", TTIME_STP, INIT_TIME
+c     $           ,diff_time
+c               endif
+c         endif
+c         endif
+c
+c         call bcast(diff_time, 8)
+c         if (diff_time .gt. 0.1) then
+cc           print *, "diff_time:", diff_time, "counter:", counter, nid
+cc    >         , last_kstep
+c            if (last_kstep .eq. 0) then
+c                counter = counter + 1
+c            else if((counter .le. 2) .and.
+c     $                     (last_kstep .eq. kstep-1))then
+c                counter = counter + 1
+c            else
+c                counter = 0
+c            endif
+c            last_kstep = kstep
+c            if (counter .gt. 2) then
+c                !print *, "into the reinit, nid:", nid, "diff_time:",
+c     $            !diff_time
+c                resetFindpts = 1
+c                call reinitialize
+c                call printVerify
+c                reinit_step = kstep
+c                if(nid .eq. 0) then
+c                   print *, "reinitilize, reiniti_step:", reinit_step
+c                endif
+c                diff_time = 0.0
+c                INIT_TIME = 100
+c                counter = 0
+c            endif
+c         endif
 
          !print *, "Finished CPU"
       enddo

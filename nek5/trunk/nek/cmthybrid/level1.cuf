@@ -201,63 +201,63 @@
                         d_us,d_ut,d_ud,d_tu,d_rx,d_dg,d_dgt,d_d,&
                         d_dt,d_jacmi,d_usrf,d_wghtc,d_wghtf,d_unx,&
                         d_uny,d_unz,d_cbc,d_all,d_jaco_c)
-         call process_gpu_particles(d_xdrange,d_xerange,d_rpart,d_ipart,&
-                        d_fptsmap,d_rfpts,d_ifpts,d_vx,d_vy,&
-                        d_vz,d_vxd,d_vyd,d_vzd,d_u, d_jgl, d_jgt, d_w)
+!        call process_gpu_particles(d_xdrange,d_xerange,d_rpart,d_ipart,&
+!                       d_fptsmap,d_rfpts,d_ifpts,d_vx,d_vy,&
+!                       d_vz,d_vxd,d_vyd,d_vzd,d_u, d_jgl, d_jgt, d_w)
          call prepost (.false.,'his')
          call in_situ_check()
          resetFindpts = 0
          if (lastep .eq. 1) goto 1001
 
-!        modstep = mod(kstep, 500)
-!        if (modstep .eq. 0) then
-!           resetFindpts = 1
-!           call reinitialize   !added by keke, need to implement
-!           call updateVariables(d_xdrange, d_xerange, d_res3,d_res1,&
-!                       d_bm1,d_tcoef,d_jgl,d_jgt,d_flux,d_w,d_vx,&
-!                       d_vy,d_vz,d_vxd,d_vyd,d_vzd,d_vtrans,d_pr,&
-!                       d_area,d_iface_flux,d_totalh,d_ur,&
-!                       d_us,d_ut,d_ud,d_tu,d_rx,d_dg,d_dgt,d_d,&
-!                       d_dt,d_jacmi,d_usrf,d_wghtc,d_wghtf,d_unx,&
-!                       d_uny,d_unz,d_cbc,d_all,d_jaco_c)
-!           call printVerify
-!        endif
-
-!        auto load balancing
-         call bcast(diff_time, 8)
-         if (diff_time .gt. 0.1) then
-!           print *, "diff_time:", diff_time, "counter:", counter, nid &
-!                 , 0.01, last_kstep
-
-            if (last_kstep .eq. 0) then
-                counter = counter + 1
-            else if((counter .le. 2) .and. &
-                          (last_kstep .eq. kstep-1))then
-                counter = counter + 1
-            else
-                counter = 0
-            endif
-            last_kstep = kstep
-            if (counter .gt. 2) then
-                resetFindpts = 1
-                call reinitialize
-                call updateVariables(d_xdrange, d_xerange, d_res3,d_res1,&
+         modstep = mod(kstep, 5)
+         if (modstep .eq. 0) then
+            resetFindpts = 1
+            call reinitialize   !added by keke, need to implement
+            call updateVariables(d_xdrange, d_xerange, d_res3,d_res1,&
                         d_bm1,d_tcoef,d_jgl,d_jgt,d_flux,d_w,d_vx,&
                         d_vy,d_vz,d_vxd,d_vyd,d_vzd,d_vtrans,d_pr,&
                         d_area,d_iface_flux,d_totalh,d_ur,&
                         d_us,d_ut,d_ud,d_tu,d_rx,d_dg,d_dgt,d_d,&
                         d_dt,d_jacmi,d_usrf,d_wghtc,d_wghtf,d_unx,&
                         d_uny,d_unz,d_cbc,d_all,d_jaco_c)
-                call printVerify
-                reinit_step = kstep
-                if(nid .eq. 0) then
-                   print *, "reinitilize, reiniti_step:", reinit_step
-                endif
-                diff_time = 0.0
-                INIT_TIME = 100
-                counter = 0
-            endif
+            call printVerify
          endif
+
+!!        auto load balancing
+!         call bcast(diff_time, 8)
+!         if (diff_time .gt. 0.1) then
+!!           print *, "diff_time:", diff_time, "counter:", counter, nid &
+!!                 , 0.01, last_kstep
+!
+!            if (last_kstep .eq. 0) then
+!                counter = counter + 1
+!            else if((counter .le. 2) .and. &
+!                          (last_kstep .eq. kstep-1))then
+!                counter = counter + 1
+!            else
+!                counter = 0
+!            endif
+!            last_kstep = kstep
+!            if (counter .gt. 2) then
+!                resetFindpts = 1
+!                call reinitialize
+!                call updateVariables(d_xdrange, d_xerange, d_res3,d_res1,&
+!                        d_bm1,d_tcoef,d_jgl,d_jgt,d_flux,d_w,d_vx,&
+!                        d_vy,d_vz,d_vxd,d_vyd,d_vzd,d_vtrans,d_pr,&
+!                        d_area,d_iface_flux,d_totalh,d_ur,&
+!                        d_us,d_ut,d_ud,d_tu,d_rx,d_dg,d_dgt,d_d,&
+!                        d_dt,d_jacmi,d_usrf,d_wghtc,d_wghtf,d_unx,&
+!                        d_uny,d_unz,d_cbc,d_all,d_jaco_c)
+!                call printVerify
+!                reinit_step = kstep
+!                if(nid .eq. 0) then
+!                   print *, "reinitilize, reiniti_step:", reinit_step
+!                endif
+!                diff_time = 0.0
+!                INIT_TIME = 100
+!                counter = 0
+!            endif
+!         endif
 
       enddo
  1001 lastep=1
